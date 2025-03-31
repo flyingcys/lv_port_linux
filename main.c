@@ -29,8 +29,8 @@ int main(void)
     lv_disp_drv_init(&disp_drv);
     disp_drv.draw_buf   = &disp_buf;
     disp_drv.flush_cb   = fbdev_flush;
-    disp_drv.hor_res    = 800;
-    disp_drv.ver_res    = 480;
+    disp_drv.hor_res    = 240;
+    disp_drv.ver_res    = 320;
     lv_disp_drv_register(&disp_drv);
 
     evdev_init();
@@ -51,7 +51,10 @@ int main(void)
 
 
     /*Create a Demo*/
-    lv_demo_widgets();
+    // lv_demo_widgets();
+    // qieshuiguo();
+    // cube_game_start();
+    fly_game_start();
 
     /*Handle LitlevGL tasks (tickless mode)*/
     while(1) {
