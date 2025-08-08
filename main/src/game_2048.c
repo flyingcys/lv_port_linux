@@ -62,17 +62,18 @@ static inline uint32_t * cell(g2048_t *g, uint16_t r, uint16_t c) {
 
 static void g2048_add_random_tile(g2048_t *g) {
     /* Collect empty cells */
-    uint16_t empty_idx[G2048_SIZE * G2048_SIZE];
+    uint16_t empty_positions[G2048_SIZE * G2048_SIZE];
     uint16_t empty_cnt = 0;
     for(uint16_t r=0; r<g->rows; ++r) {
         for(uint16_t c=0; c<g->cols; ++c) {
-            if(*cell(g,r,c) == 0) empty_idx[empty_cnt++] = r * g->cols + c;
+            if(*cell(g,r,c) == 0) empty_positions[empty_cnt++] = (uint16_t)(r * g->cols + c);
         }
     }
     if(empty_cnt == 0) return;
-    uint16_t pick = (uint16_t)(lv_rand(0, empty_cnt - 1));
-    uint16_t pr = pick / g->cols;
-    uint16_t pc = pick % g->cols;
+    uint16_t pick_idx = (uint16_t)lv_rand(0, empty_cnt - 1);
+    uint16_t pos = empty_positions[pick_idx];
+    uint16_t pr = (uint16_t)(pos / g->cols);
+    uint16_t pc = (uint16_t)(pos % g->cols);
     *cell(g, pr, pc) = (lv_rand(0, 9) == 0) ? 4 : 2; /* 10% for 4 */
 }
 
@@ -142,7 +143,7 @@ static bool g2048_move(g2048_t *g, lv_dir_t dir) {
                 /* reverse */
                 for(uint16_t i=0;i<g->cols/2;i++) { uint32_t t=tmp[i]; tmp[i]=tmp[g->cols-1-i]; tmp[g->cols-1-i]=t; }
             }
-            bool m = compress_line(tmp, g->cols, &score_gain);
+            (void)compress_line(tmp, g->cols, &score_gain);
             if(dir == LV_DIR_RIGHT) {
                 for(uint16_t i=0;i<g->cols/2;i++) { uint32_t t=tmp[i]; tmp[i]=tmp[g->cols-1-i]; tmp[g->cols-1-i]=t; }
             }
@@ -156,14 +157,13 @@ static bool g2048_move(g2048_t *g, lv_dir_t dir) {
             if(dir == LV_DIR_BOTTOM) {
                 for(uint16_t i=0;i<g->rows/2;i++) { uint32_t t=tmp[i]; tmp[i]=tmp[g->rows-1-i]; tmp[g->rows-1-i]=t; }
             }
-            bool m = compress_line(tmp, g->rows, &score_gain);
+            (void)compress_line(tmp, g->rows, &score_gain);
             if(dir == LV_DIR_BOTTOM) {
                 for(uint16_t i=0;i<g->rows/2;i++) { uint32_t t=tmp[i]; tmp[i]=tmp[g->rows-1-i]; tmp[g->rows-1-i]=t; }
             }
             for(uint16_t r=0;r<g->rows;r++) {
                 if(*cell(g,r,c) != tmp[r]) { *cell(g,r,c) = tmp[r]; moved = true; }
             }
-            (void)m;
         }
     }
 
@@ -190,11 +190,17 @@ static void animate_tile_move(lv_obj_t * obj, lv_coord_t x, lv_coord_t y) {
     lv_anim_start(&b);
 }
 
+static void anim_exec_set_zoom(void * var, int32_t v) {
+    lv_obj_set_style_transform_zoom((lv_obj_t *)var, (lv_style_value_t)v, 0);
+}
+
 static void animate_tile_scale(lv_obj_t * obj) {
     lv_anim_t a; lv_anim_init(&a);
     lv_anim_set_var(&a, obj);
-    lv_anim_set_values(&a, LV_SCALE_NONE, LV_SCALE_ZOOM(108));
-    lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_style_transform_zoom);
+    int32_t z0 = LV_SCALE_NONE;                   /* 256 */
+    int32_t z1 = (LV_SCALE_NONE * 108) / 100;     /* ~108% */
+    lv_anim_set_values(&a, z0, z1);
+    lv_anim_set_exec_cb(&a, anim_exec_set_zoom);
     lv_anim_set_time(&a, 90);
     lv_anim_set_path_cb(&a, lv_anim_path_overshoot);
     lv_anim_start(&a);
