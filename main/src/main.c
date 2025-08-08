@@ -23,6 +23,7 @@
 #include "lvgl/examples/lv_examples.h"
 #include "lvgl/demos/lv_demos.h"
 #include <SDL.h>
+#include "game_2048.h"
 
 /*********************
  *      DEFINES
@@ -90,7 +91,7 @@ int main(int argc, char **argv)
   /* - lv_demo_stress(); */
   /* - lv_example_label_1(); */
   /* - etc. */
-  lv_demo_widgets();
+  game_2048_start();
 
   while(1) {
     /* Periodically call the lv_task handler.
