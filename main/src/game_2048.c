@@ -42,6 +42,8 @@ typedef struct {
     lv_obj_t * status_label;
     lv_obj_t * reset_btn;
     lv_obj_t * size_dd;
+    lv_obj_t * title_label;
+    lv_obj_t * reset_label;
     lv_obj_t * tiles[G2048_MAX_SIZE * G2048_MAX_SIZE];
     /* gesture state */
     lv_point_t touch_start;
@@ -307,6 +309,25 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
 
     lv_coord_t cell_size = (board - gap * (g->cols + 1)) / g->cols;
 
+    /* 全局缩放系数（基于较短边，影响标题、按钮、分数字号与间距） */
+    int32_t short_side = LV_MIN(sw, sh);
+    /* 以 320 作为 1.0 基准，限制在 [0.8, 1.8] */
+    int32_t k_num = (short_side * 100) / 320;
+    if(k_num < 80) k_num = 80; if(k_num > 180) k_num = 180; /* 百分比 */
+
+    /* 标题、分数、按钮文字动态字号 */
+    int title_px = (28 * k_num) / 100; if(title_px < 16) title_px = 16; if(title_px > 42) title_px = 42;
+    int score_px = (18 * k_num) / 100; if(score_px < 12) score_px = 12; if(score_px > 28) score_px = 28;
+    int reset_px = (16 * k_num) / 100; if(reset_px < 12) reset_px = 12; if(reset_px > 24) reset_px = 24;
+
+    /* 选取接近的字体 */
+    const lv_font_t * title_font = choose_tile_font(title_px);
+    const lv_font_t * score_font = choose_tile_font(score_px);
+    const lv_font_t * reset_font = choose_tile_font(reset_px);
+    lv_obj_set_style_text_font(g->title_label, title_font, 0);
+    lv_obj_set_style_text_font(g->score_label, score_font, 0);
+    if(g->reset_label) lv_obj_set_style_text_font(g->reset_label, reset_font, 0);
+
     /* 根据棋盘大小调整动画时间（大屏稍慢，小屏稍快） */
     int32_t move_ms = (85 * (int32_t)board) / 320;  /* 320 基准约 85ms */
     int32_t scale_ms = (95 * (int32_t)board) / 320; /* 320 基准约 95ms */
@@ -435,18 +456,18 @@ void game_2048_start(void) {
     lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, 0);
     g->header = header;
 
-    lv_obj_t * title = lv_label_create(header);
-    lv_label_set_text(title, "2048");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
+    g->title_label = lv_label_create(header);
+    lv_label_set_text(g->title_label, "2048");
+    lv_obj_set_style_text_font(g->title_label, &lv_font_montserrat_28, 0);
 
     g->score_label = lv_label_create(header);
     lv_label_set_text(g->score_label, "Score: 0");
     lv_obj_add_flag(g->score_label, LV_OBJ_FLAG_FLEX_IN_NEW_TRACK);
 
     g->reset_btn = lv_button_create(header);
-    lv_obj_t * rlab = lv_label_create(g->reset_btn);
-    lv_label_set_text(rlab, "Reset");
-    lv_obj_center(rlab);
+    g->reset_label = lv_label_create(g->reset_btn);
+    lv_label_set_text(g->reset_label, "Reset");
+    lv_obj_center(g->reset_label);
     lv_obj_add_event_cb(g->reset_btn, g2048_on_reset, LV_EVENT_CLICKED, NULL);
 
     /* Grid size selector */
