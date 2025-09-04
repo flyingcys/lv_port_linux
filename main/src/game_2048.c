@@ -6,7 +6,8 @@
 #include "game_2048.h"
 
 /* Configuration for board size and UI */
-#define G2048_SIZE 4
+#define G2048_DEFAULT_SIZE 4
+#define G2048_MAX_SIZE 6
 
 /* Colors tuned for readability; use default theme palettes to avoid heavy assets */
 static inline lv_color_t tile_color_for_value(uint32_t v) {
@@ -29,7 +30,7 @@ static inline lv_color_t tile_color_for_value(uint32_t v) {
 typedef struct {
     uint16_t cols;
     uint16_t rows;
-    uint32_t cells[G2048_SIZE * G2048_SIZE];
+    uint32_t cells[G2048_MAX_SIZE * G2048_MAX_SIZE];
     uint32_t score;
     bool moved_last;
     bool won;
@@ -40,7 +41,8 @@ typedef struct {
     lv_obj_t * score_label;
     lv_obj_t * status_label;
     lv_obj_t * reset_btn;
-    lv_obj_t * tiles[G2048_SIZE * G2048_SIZE];
+    lv_obj_t * size_dd;
+    lv_obj_t * tiles[G2048_MAX_SIZE * G2048_MAX_SIZE];
     /* gesture state */
     lv_point_t touch_start;
     bool touch_active;
@@ -57,6 +59,7 @@ static void g2048_on_reset(lv_event_t * e);
 static void g2048_on_gesture(lv_event_t * e);
 static void g2048_on_pointer(lv_event_t * e);
 static void g2048_on_size_changed(lv_event_t * e);
+static void g2048_on_grid_size_selected(lv_event_t * e);
 
 static inline uint32_t * cell(g2048_t *g, uint16_t r, uint16_t c) {
     return &g->cells[r * g->cols + c];
@@ -64,7 +67,7 @@ static inline uint32_t * cell(g2048_t *g, uint16_t r, uint16_t c) {
 
 static void g2048_add_random_tile(g2048_t *g) {
     /* Collect empty cells */
-    uint16_t empty_positions[G2048_SIZE * G2048_SIZE];
+    uint16_t empty_positions[G2048_MAX_SIZE * G2048_MAX_SIZE];
     uint16_t empty_cnt = 0;
     for(uint16_t r=0; r<g->rows; ++r) {
         for(uint16_t c=0; c<g->cols; ++c) {
@@ -136,7 +139,7 @@ static bool g2048_move(g2048_t *g, lv_dir_t dir) {
     bool moved = false;
     uint32_t score_gain = 0;
 
-    uint32_t tmp[G2048_SIZE];
+    uint32_t tmp[G2048_MAX_SIZE];
 
     if(dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT) {
         for(uint16_t r=0;r<g->rows;r++) {
@@ -285,6 +288,18 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
             set_tile_visual(t, *cell(g,r,c));
         }
     }
+
+    /* Hide tiles outside of the active grid (when downsizing) */
+    for(uint16_t r=g->rows; r<G2048_MAX_SIZE; r++) {
+        for(uint16_t c=0; c<G2048_MAX_SIZE; c++) {
+            lv_obj_add_flag(g->tiles[r*G2048_MAX_SIZE + c], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    for(uint16_t r=0; r<g->rows; r++) {
+        for(uint16_t c=g->cols; c<G2048_MAX_SIZE; c++) {
+            lv_obj_add_flag(g->tiles[r*G2048_MAX_SIZE + c], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 static void g2048_on_reset(lv_event_t * e) {
@@ -353,8 +368,8 @@ void game_2048_start(void) {
 
     g2048_t * g = (g2048_t *)lv_malloc_zeroed(sizeof(g2048_t));
     LV_ASSERT_MALLOC(g);
-    g->cols = G2048_SIZE;
-    g->rows = G2048_SIZE;
+    g->cols = G2048_DEFAULT_SIZE;
+    g->rows = G2048_DEFAULT_SIZE;
     G = g;
 
     lv_obj_t * scr = lv_screen_active();
@@ -393,6 +408,12 @@ void game_2048_start(void) {
     lv_obj_center(rlab);
     lv_obj_add_event_cb(g->reset_btn, g2048_on_reset, LV_EVENT_CLICKED, NULL);
 
+    /* Grid size selector */
+    g->size_dd = lv_dropdown_create(header);
+    lv_dropdown_set_options_static(g->size_dd, "4x4\n5x5\n6x6");
+    lv_dropdown_set_selected(g->size_dd, 0);
+    lv_obj_add_event_cb(g->size_dd, g2048_on_grid_size_selected, LV_EVENT_VALUE_CHANGED, NULL);
+
     g->status_label = lv_label_create(g->root);
     lv_label_set_text(g->status_label, "");
     lv_obj_add_flag(g->status_label, LV_OBJ_FLAG_HIDDEN);
@@ -409,9 +430,9 @@ void game_2048_start(void) {
     lv_obj_add_event_cb(g->root, g2048_on_size_changed, LV_EVENT_SIZE_CHANGED, NULL);
     lv_obj_add_event_cb(g->grid, g2048_on_size_changed, LV_EVENT_SIZE_CHANGED, NULL);
 
-    /* Create tiles */
-    for(uint16_t r=0;r<g->rows;r++) {
-        for(uint16_t c=0;c<g->cols;c++) {
+    /* Create tiles for the maximum grid; we will show a subset */
+    for(uint16_t r=0;r<G2048_MAX_SIZE;r++) {
+        for(uint16_t c=0;c<G2048_MAX_SIZE;c++) {
             lv_obj_t * tile = lv_obj_create(g->grid);
             lv_obj_remove_style_all(tile);
             lv_obj_set_style_radius(tile, 6, 0);
@@ -419,7 +440,8 @@ void game_2048_start(void) {
             lv_obj_set_style_shadow_width(tile, 8, 0);
             lv_obj_set_style_shadow_opa(tile, LV_OPA_20, 0);
             lv_obj_set_style_shadow_ofs_y(tile, 2, 0);
-            g->tiles[r*g->cols+c] = tile;
+            g->tiles[r*G2048_MAX_SIZE + c] = tile;
+            lv_obj_add_flag(tile, LV_OBJ_FLAG_HIDDEN);
         }
     }
 
@@ -436,5 +458,18 @@ void game_2048_start(void) {
 static void g2048_on_size_changed(lv_event_t * e) {
     LV_UNUSED(e);
     if(!G) return;
+    g2048_update_ui(G, false);
+}
+
+static void g2048_on_grid_size_selected(lv_event_t * e) {
+    lv_obj_t * dd = lv_event_get_target(e);
+    if(!G || dd != G->size_dd) return;
+    uint16_t sel = (uint16_t)lv_dropdown_get_selected(G->size_dd);
+    uint16_t new_size = (uint16_t)(4 + sel); /* 0->4, 1->5, 2->6 */
+    if(new_size < 2 || new_size > G2048_MAX_SIZE) return;
+    if(G->rows == new_size && G->cols == new_size) return;
+    G->rows = new_size;
+    G->cols = new_size;
+    g2048_reset_board(G);
     g2048_update_ui(G, false);
 }
