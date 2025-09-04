@@ -32,6 +32,7 @@ typedef struct {
     uint16_t rows;
     uint32_t cells[G2048_MAX_SIZE * G2048_MAX_SIZE];
     uint32_t score;
+    uint32_t best_score;
     bool moved_last;
     bool won;
     /* UI references */
@@ -39,6 +40,7 @@ typedef struct {
     lv_obj_t * header;
     lv_obj_t * grid;
     lv_obj_t * score_label;
+    lv_obj_t * best_label;
     lv_obj_t * status_label;
     lv_obj_t * reset_btn;
     lv_obj_t * size_dd;
@@ -264,8 +266,13 @@ static const lv_font_t * choose_tile_font(lv_coord_t cell_size) {
 static void g2048_update_ui(g2048_t *g, bool animate) {
     /* Update dynamic texts first; status visibility impacts available space */
     char sbuf[32];
+    /* 更新最佳分数 */
+    if(g->score > g->best_score) g->best_score = g->score;
     lv_snprintf(sbuf, sizeof(sbuf), "Score: %lu", (unsigned long)g->score);
     lv_label_set_text(g->score_label, sbuf);
+    char bbuf[32];
+    lv_snprintf(bbuf, sizeof(bbuf), "Best: %lu", (unsigned long)g->best_score);
+    if(g->best_label) lv_label_set_text(g->best_label, bbuf);
 
     if(g->won) {
         lv_label_set_text(g->status_label, "You reached 2048!");
@@ -323,9 +330,11 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
     /* 选取接近的字体 */
     const lv_font_t * title_font = choose_tile_font(title_px);
     const lv_font_t * score_font = choose_tile_font(score_px);
+    const lv_font_t * best_font = score_font;
     const lv_font_t * reset_font = choose_tile_font(reset_px);
     lv_obj_set_style_text_font(g->title_label, title_font, 0);
     lv_obj_set_style_text_font(g->score_label, score_font, 0);
+    if(g->best_label) lv_obj_set_style_text_font(g->best_label, best_font, 0);
     if(g->reset_label) lv_obj_set_style_text_font(g->reset_label, reset_font, 0);
 
     /* 间距与按钮内边距按比例缩放 */
@@ -479,6 +488,9 @@ void game_2048_start(void) {
     g->score_label = lv_label_create(header);
     lv_label_set_text(g->score_label, "Score: 0");
     lv_obj_add_flag(g->score_label, LV_OBJ_FLAG_FLEX_IN_NEW_TRACK);
+
+    g->best_label = lv_label_create(header);
+    lv_label_set_text(g->best_label, "Best: 0");
 
     g->reset_btn = lv_button_create(header);
     g->reset_label = lv_label_create(g->reset_btn);
