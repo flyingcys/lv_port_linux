@@ -35,6 +35,7 @@ typedef struct {
     bool won;
     /* UI references */
     lv_obj_t * root;
+    lv_obj_t * header;
     lv_obj_t * grid;
     lv_obj_t * score_label;
     lv_obj_t * status_label;
@@ -55,6 +56,7 @@ static void g2048_update_ui(g2048_t *g, bool animate);
 static void g2048_on_reset(lv_event_t * e);
 static void g2048_on_gesture(lv_event_t * e);
 static void g2048_on_pointer(lv_event_t * e);
+static void g2048_on_size_changed(lv_event_t * e);
 
 static inline uint32_t * cell(g2048_t *g, uint16_t r, uint16_t c) {
     return &g->cells[r * g->cols + c];
@@ -226,28 +228,7 @@ static void set_tile_visual(lv_obj_t * tile, uint32_t v) {
 }
 
 static void g2048_update_ui(g2048_t *g, bool animate) {
-    /* Layout based on current screen size; maintain square board */
-    lv_coord_t sw = lv_display_get_horizontal_resolution(NULL);
-    lv_coord_t sh = lv_display_get_vertical_resolution(NULL);
-    lv_coord_t board = LV_MIN(sw, sh) - 40; /* margin */
-    if(board < 160) board = 160;
-
-    lv_obj_set_size(g->grid, board, board);
-
-    lv_coord_t gap = 6;
-    lv_coord_t cell_size = (board - gap * (g->cols + 1)) / g->cols;
-
-    for(uint16_t r=0;r<g->rows;r++) {
-        for(uint16_t c=0;c<g->cols;c++) {
-            lv_obj_t * t = g->tiles[r*g->cols+c];
-            lv_coord_t x = gap + c * (cell_size + gap);
-            lv_coord_t y = gap + r * (cell_size + gap);
-            lv_obj_set_size(t, cell_size, cell_size);
-            if(animate) animate_tile_move(t, x, y); else lv_obj_set_pos(t, x, y);
-            set_tile_visual(t, *cell(g,r,c));
-        }
-    }
-
+    /* Update dynamic texts first; status visibility impacts available space */
     char sbuf[32];
     lv_snprintf(sbuf, sizeof(sbuf), "Score: %lu", (unsigned long)g->score);
     lv_label_set_text(g->score_label, sbuf);
@@ -260,6 +241,49 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
         lv_obj_clear_flag(g->status_label, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(g->status_label, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    /* Compute available space accounting for header/status/paddings, keep square board */
+    lv_obj_update_layout(g->root);
+
+    lv_coord_t sw = lv_display_get_horizontal_resolution(NULL);
+    lv_coord_t sh = lv_display_get_vertical_resolution(NULL);
+
+    lv_coord_t pad_l = lv_obj_get_style_pad_left(g->root, 0);
+    lv_coord_t pad_r = lv_obj_get_style_pad_right(g->root, 0);
+    lv_coord_t pad_t = lv_obj_get_style_pad_top(g->root, 0);
+    lv_coord_t pad_b = lv_obj_get_style_pad_bottom(g->root, 0);
+    lv_coord_t row_gap = lv_obj_get_style_pad_row(g->root, 0);
+
+    lv_coord_t header_h = lv_obj_get_height(g->header);
+    lv_coord_t status_h = lv_obj_has_flag(g->status_label, LV_OBJ_FLAG_HIDDEN) ? 0 : lv_obj_get_height(g->status_label);
+
+    lv_coord_t avail_w = sw - pad_l - pad_r;
+    lv_coord_t avail_h = sh - pad_t - pad_b - header_h - status_h - row_gap * 2;
+    if(avail_w < 0) avail_w = 0;
+    if(avail_h < 0) avail_h = 0;
+
+    lv_coord_t board = (avail_w < avail_h) ? avail_w : avail_h;
+    if(board < 160) board = 160;
+
+    lv_obj_set_size(g->grid, board, board);
+
+    /* Gap scaled with board size within sensible range */
+    lv_coord_t gap = board / 80; /* ~5-8px typically */
+    if(gap < 4) gap = 4;
+    if(gap > 14) gap = 14;
+
+    lv_coord_t cell_size = (board - gap * (g->cols + 1)) / g->cols;
+    
+    for(uint16_t r=0;r<g->rows;r++) {
+        for(uint16_t c=0;c<g->cols;c++) {
+            lv_obj_t * t = g->tiles[r*g->cols+c];
+            lv_coord_t x = gap + c * (cell_size + gap);
+            lv_coord_t y = gap + r * (cell_size + gap);
+            lv_obj_set_size(t, cell_size, cell_size);
+            if(animate) animate_tile_move(t, x, y); else lv_obj_set_pos(t, x, y);
+            set_tile_visual(t, *cell(g,r,c));
+        }
     }
 }
 
@@ -340,6 +364,8 @@ void game_2048_start(void) {
     lv_obj_remove_style_all(g->root);
     lv_obj_set_size(g->root, LV_PCT(100), LV_PCT(100));
     lv_obj_set_flex_flow(g->root, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(g->root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+    lv_obj_set_scroll_dir(g->root, LV_DIR_VER);
     lv_obj_set_style_pad_all(g->root, 8, 0);
     lv_obj_set_style_pad_row(g->root, 8, 0);
 
@@ -351,6 +377,7 @@ void game_2048_start(void) {
     lv_obj_set_style_pad_column(header, 8, 0);
     lv_obj_set_style_pad_all(header, 4, 0);
     lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, 0);
+    g->header = header;
 
     lv_obj_t * title = lv_label_create(header);
     lv_label_set_text(title, "2048");
@@ -378,6 +405,10 @@ void game_2048_start(void) {
     lv_obj_set_style_bg_opa(g->grid, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(g->grid, 8, 0);
 
+    /* React to container size changes to keep layout responsive */
+    lv_obj_add_event_cb(g->root, g2048_on_size_changed, LV_EVENT_SIZE_CHANGED, NULL);
+    lv_obj_add_event_cb(g->grid, g2048_on_size_changed, LV_EVENT_SIZE_CHANGED, NULL);
+
     /* Create tiles */
     for(uint16_t r=0;r<g->rows;r++) {
         for(uint16_t c=0;c<g->cols;c++) {
@@ -400,4 +431,10 @@ void game_2048_start(void) {
     /* Initialize state */
     g2048_reset_board(g);
     g2048_update_ui(g, false);
+}
+
+static void g2048_on_size_changed(lv_event_t * e) {
+    LV_UNUSED(e);
+    if(!G) return;
+    g2048_update_ui(G, false);
 }
