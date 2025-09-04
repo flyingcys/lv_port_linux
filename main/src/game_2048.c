@@ -328,6 +328,21 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
     lv_obj_set_style_text_font(g->score_label, score_font, 0);
     if(g->reset_label) lv_obj_set_style_text_font(g->reset_label, reset_font, 0);
 
+    /* 间距与按钮内边距按比例缩放 */
+    int pad_all = (8 * k_num) / 100; if(pad_all < 4) pad_all = 4; if(pad_all > 18) pad_all = 18;
+    int row_gap_scaled = (8 * k_num) / 100; if(row_gap_scaled < 4) row_gap_scaled = 4; if(row_gap_scaled > 18) row_gap_scaled = 18;
+    int header_pad_col = (8 * k_num) / 100; if(header_pad_col < 4) header_pad_col = 4; if(header_pad_col > 20) header_pad_col = 20;
+    int header_pad_all = (4 * k_num) / 100; if(header_pad_all < 2) header_pad_all = 2; if(header_pad_all > 12) header_pad_all = 12;
+    int btn_pad_h = (6 * k_num) / 100; if(btn_pad_h < 3) btn_pad_h = 3; if(btn_pad_h > 12) btn_pad_h = 12;
+    int btn_pad_w = (10 * k_num) / 100; if(btn_pad_w < 6) btn_pad_w = 6; if(btn_pad_w > 20) btn_pad_w = 20;
+
+    lv_obj_set_style_pad_all(g->root, pad_all, 0);
+    lv_obj_set_style_pad_row(g->root, row_gap_scaled, 0);
+    lv_obj_set_style_pad_column(g->header, header_pad_col, 0);
+    lv_obj_set_style_pad_all(g->header, header_pad_all, 0);
+    lv_obj_set_style_pad_ver(g->reset_btn, btn_pad_h, 0);
+    lv_obj_set_style_pad_hor(g->reset_btn, btn_pad_w, 0);
+
     /* 根据棋盘大小调整动画时间（大屏稍慢，小屏稍快） */
     int32_t move_ms = (85 * (int32_t)board) / 320;  /* 320 基准约 85ms */
     int32_t scale_ms = (95 * (int32_t)board) / 320; /* 320 基准约 95ms */
@@ -443,6 +458,7 @@ void game_2048_start(void) {
     lv_obj_set_flex_flow(g->root, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(g->root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
     lv_obj_set_scroll_dir(g->root, LV_DIR_VER);
+    /* 初始基础间距，后续在 g2048_update_ui 中按比例更新 */
     lv_obj_set_style_pad_all(g->root, 8, 0);
     lv_obj_set_style_pad_row(g->root, 8, 0);
 
