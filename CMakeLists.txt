@@ -81,6 +81,7 @@ if(USE_FREERTOS)
 else()
     add_executable(main
         ${PROJECT_SOURCE_DIR}/main/src/main.c
+        ${PROJECT_SOURCE_DIR}/main/src/game_2048.c
         ${PROJECT_SOURCE_DIR}/main/src/mouse_cursor_icon.c
     )
 endif()

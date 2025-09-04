@@ -191,7 +191,7 @@ static void animate_tile_move(lv_obj_t * obj, lv_coord_t x, lv_coord_t y) {
 }
 
 static void anim_exec_set_zoom(void * var, int32_t v) {
-    lv_obj_set_style_transform_zoom((lv_obj_t *)var, (lv_style_value_t)v, 0);
+    lv_obj_set_style_transform_zoom((lv_obj_t *)var, (int32_t)v, 0);
 }
 
 static void animate_tile_scale(lv_obj_t * obj) {
