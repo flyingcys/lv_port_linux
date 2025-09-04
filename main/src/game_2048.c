@@ -46,6 +46,9 @@ typedef struct {
     /* gesture state */
     lv_point_t touch_start;
     bool touch_active;
+    /* animation config derived from board size */
+    uint16_t anim_move_ms;
+    uint16_t anim_scale_ms;
 } g2048_t;
 
 static g2048_t * G = NULL;
@@ -179,19 +182,19 @@ static bool g2048_move(g2048_t *g, lv_dir_t dir) {
     return moved;
 }
 
-static void animate_tile_move(lv_obj_t * obj, lv_coord_t x, lv_coord_t y) {
+static void animate_tile_move(lv_obj_t * obj, lv_coord_t x, lv_coord_t y, uint16_t ms) {
     lv_anim_t a; lv_anim_init(&a);
     lv_anim_set_var(&a, obj);
     lv_anim_set_values(&a, lv_obj_get_x(obj), x);
     lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_x);
-    lv_anim_set_time(&a, 90);
+    lv_anim_set_time(&a, ms);
     lv_anim_start(&a);
 
     lv_anim_t b; lv_anim_init(&b);
     lv_anim_set_var(&b, obj);
     lv_anim_set_values(&b, lv_obj_get_y(obj), y);
     lv_anim_set_exec_cb(&b, (lv_anim_exec_xcb_t)lv_obj_set_y);
-    lv_anim_set_time(&b, 90);
+    lv_anim_set_time(&b, ms);
     lv_anim_start(&b);
 }
 
@@ -199,14 +202,14 @@ static void anim_exec_set_zoom(void * var, int32_t v) {
     lv_obj_set_style_transform_zoom((lv_obj_t *)var, (int32_t)v, 0);
 }
 
-static void animate_tile_scale(lv_obj_t * obj) {
+static void animate_tile_scale(lv_obj_t * obj, uint16_t ms) {
     lv_anim_t a; lv_anim_init(&a);
     lv_anim_set_var(&a, obj);
     int32_t z0 = LV_SCALE_NONE;                   /* 256 */
     int32_t z1 = (LV_SCALE_NONE * 108) / 100;     /* ~108% */
     lv_anim_set_values(&a, z0, z1);
     lv_anim_set_exec_cb(&a, anim_exec_set_zoom);
-    lv_anim_set_time(&a, 90);
+    lv_anim_set_time(&a, ms);
     lv_anim_set_path_cb(&a, lv_anim_path_overshoot);
     lv_anim_start(&a);
 }
@@ -219,7 +222,6 @@ static void set_tile_visual(lv_obj_t * tile, uint32_t v) {
         label = lv_label_create(tile);
         lv_obj_center(label);
         lv_obj_set_style_text_color(label, lv_color_white(), 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
     }
     if(v == 0) lv_obj_add_flag(tile, LV_OBJ_FLAG_HIDDEN);
     else {
@@ -228,6 +230,33 @@ static void set_tile_visual(lv_obj_t * tile, uint32_t v) {
         lv_snprintf(buf, sizeof(buf), "%lu", (unsigned long)v);
         lv_label_set_text(label, buf);
     }
+}
+
+/* 依据单元格大小选取合适的字体（就近取值） */
+static const lv_font_t * choose_tile_font(lv_coord_t cell_size) {
+    /* 目标文字高度为单元格的 ~45% */
+    int target = (int)(cell_size * 45) / 100;
+    if(target < 12) target = 12;
+    if(target > 48) target = 48;
+
+    /* 可用字体表（已在 lv_conf.h 启用） */
+    struct FontItem { int sz; const lv_font_t * f; };
+    static const struct FontItem fonts[] = {
+        {12, &lv_font_montserrat_12}, {14, &lv_font_montserrat_14}, {16, &lv_font_montserrat_16},
+        {18, &lv_font_montserrat_18}, {20, &lv_font_montserrat_20}, {22, &lv_font_montserrat_22},
+        {24, &lv_font_montserrat_24}, {26, &lv_font_montserrat_26}, {28, &lv_font_montserrat_28},
+        {30, &lv_font_montserrat_30}, {32, &lv_font_montserrat_32}, {34, &lv_font_montserrat_34},
+        {36, &lv_font_montserrat_36}, {38, &lv_font_montserrat_38}, {40, &lv_font_montserrat_40},
+        {42, &lv_font_montserrat_42}, {44, &lv_font_montserrat_44}, {46, &lv_font_montserrat_46},
+        {48, &lv_font_montserrat_48}
+    };
+    const lv_font_t * best = fonts[0].f;
+    int best_diff = 1000;
+    for(size_t i=0;i<sizeof(fonts)/sizeof(fonts[0]);++i) {
+        int d = fonts[i].sz - target; if(d<0) d = -d;
+        if(d < best_diff) { best_diff = d; best = fonts[i].f; }
+    }
+    return best;
 }
 
 static void g2048_update_ui(g2048_t *g, bool animate) {
@@ -277,14 +306,26 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
     if(gap > 14) gap = 14;
 
     lv_coord_t cell_size = (board - gap * (g->cols + 1)) / g->cols;
+
+    /* 根据棋盘大小调整动画时间（大屏稍慢，小屏稍快） */
+    int32_t move_ms = (85 * (int32_t)board) / 320;  /* 320 基准约 85ms */
+    int32_t scale_ms = (95 * (int32_t)board) / 320; /* 320 基准约 95ms */
+    if(move_ms < 70) move_ms = 70; if(move_ms > 160) move_ms = 160;
+    if(scale_ms < 80) scale_ms = 80; if(scale_ms > 180) scale_ms = 180;
+    g->anim_move_ms = (uint16_t)move_ms;
+    g->anim_scale_ms = (uint16_t)scale_ms;
+
+    const lv_font_t * tile_font = choose_tile_font(cell_size);
     
     for(uint16_t r=0;r<g->rows;r++) {
         for(uint16_t c=0;c<g->cols;c++) {
-            lv_obj_t * t = g->tiles[r*g->cols+c];
+            lv_obj_t * t = g->tiles[r*G2048_MAX_SIZE + c];
             lv_coord_t x = gap + c * (cell_size + gap);
             lv_coord_t y = gap + r * (cell_size + gap);
             lv_obj_set_size(t, cell_size, cell_size);
-            if(animate) animate_tile_move(t, x, y); else lv_obj_set_pos(t, x, y);
+            lv_obj_t * lbl = lv_obj_get_child(t, 0);
+            if(lbl) lv_obj_set_style_text_font(lbl, tile_font, 0);
+            if(animate) animate_tile_move(t, x, y, g->anim_move_ms); else lv_obj_set_pos(t, x, y);
             set_tile_visual(t, *cell(g,r,c));
         }
     }
@@ -353,7 +394,7 @@ static void g2048_on_pointer(lv_event_t * e) {
             g2048_spawn_random(G);
             g2048_update_ui(G, true);
             /* highlight merged tiles via scale animation */
-            for(uint16_t r=0;r<G->rows;r++) for(uint16_t c=0;c<G->cols;c++) if(*cell(G,r,c)!=0) animate_tile_scale(G->tiles[r*G->cols+c]);
+            for(uint16_t r=0;r<G->rows;r++) for(uint16_t c=0;c<G->cols;c++) if(*cell(G,r,c)!=0) animate_tile_scale(G->tiles[r*G2048_MAX_SIZE + c], G->anim_scale_ms);
         }
         if(!g2048_can_move(G)) g2048_update_ui(G, false);
     }
