@@ -8,6 +8,8 @@
 /* Configuration for board size and UI */
 #define G2048_DEFAULT_SIZE 4
 #define G2048_MAX_SIZE 6
+/* 棋盘边长的最小限制（px），当屏幕更小会允许垂直滚动以保证可读性 */
+#define G2048_MIN_BOARD_PX 240
 
 /* Colors tuned for readability; use default theme palettes to avoid heavy assets */
 static inline lv_color_t tile_color_for_value(uint32_t v) {
@@ -304,8 +306,13 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
     if(avail_w < 0) avail_w = 0;
     if(avail_h < 0) avail_h = 0;
 
-    lv_coord_t board = (avail_w < avail_h) ? avail_w : avail_h;
-    if(board < 160) board = 160;
+    /* 目标棋盘大小：跟随屏幕短边放大缩小，但不小于最小限制；
+       宽度上不超过可用宽度；高度允许超过以触发竖向滚动，从而避免“放大受 Header 高度限制”。 */
+    lv_coord_t short_side = LV_MIN(sw, sh);
+    lv_coord_t desired_by_short = short_side - 16; /* 减少少量边距 */
+    if(desired_by_short < G2048_MIN_BOARD_PX) desired_by_short = G2048_MIN_BOARD_PX;
+    lv_coord_t board = desired_by_short;
+    if(board > avail_w) board = avail_w; /* 宽度受限，不做横向滚动 */
 
     lv_obj_set_size(g->grid, board, board);
 
@@ -317,7 +324,7 @@ static void g2048_update_ui(g2048_t *g, bool animate) {
     lv_coord_t cell_size = (board - gap * (g->cols + 1)) / g->cols;
 
     /* 全局缩放系数（基于较短边，影响标题、按钮、分数字号与间距） */
-    int32_t short_side = LV_MIN(sw, sh);
+    /* 复用上面的 short_side 计算全局缩放系数 */
     /* 以 320 作为 1.0 基准，限制在 [0.8, 1.8] */
     int32_t k_num = (short_side * 100) / 320;
     if(k_num < 80) k_num = 80; if(k_num > 180) k_num = 180; /* 百分比 */
@@ -466,7 +473,9 @@ void game_2048_start(void) {
     lv_obj_set_size(g->root, LV_PCT(100), LV_PCT(100));
     lv_obj_set_flex_flow(g->root, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(g->root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+    /* 允许纵向滚动，便于在小屏但最小棋盘限制较大时仍可完整显示 */
     lv_obj_set_scroll_dir(g->root, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(g->root, LV_SCROLLBAR_MODE_AUTO);
     /* 初始基础间距，后续在 g2048_update_ui 中按比例更新 */
     lv_obj_set_style_pad_all(g->root, 8, 0);
     lv_obj_set_style_pad_row(g->root, 8, 0);
